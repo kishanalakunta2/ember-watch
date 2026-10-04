@@ -1,0 +1,111 @@
+# Live pipeline: pull NASA FIRMS, Open-Meteo and NIFC WFIGS, run the analytics,
+# publish the dashboard + data products to GitHub Pages. Free on public repos.
+name: Pipeline (live data to Pages)
+
+on:
+  schedule:
+    - cron: "7,37 * * * *"        # every 30 min, off the top of the hour
+  workflow_dispatch:
+    inputs:
+      fixtures:
+        description: "Run on synthetic sample inputs instead of live feeds"
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: ["web/**", "wildfire/**", "config/**", "scripts/**", ".github/workflows/pipeline.yml"]
+
+permissions: {}                     # every job opts in to the minimum it needs
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      models: read                  # only used if LLM_BASE_URL points at GitHub Models
+      id-token: write               # build-provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: requirements/pipeline.txt
+      - name: Install (hash-pinned)
+        run: pip install --require-hashes --no-deps -r requirements/pipeline.txt
+      - name: Weather cache bucket
+        id: bucket
+        run: echo "key=$(date -u +%Y%m%d)-$(( 10#$(date -u +%H) / 6 ))" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache
+          key: wx-${{ steps.bucket.outputs.key }}
+      - name: Run pipeline
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+          LLM_MODEL: ${{ vars.LLM_MODEL }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          GITHUB_MODELS_TOKEN: ${{ github.token }}   # only ever sent to models.github.ai
+          FIXTURES: ${{ inputs.fixtures && '--fixtures' || '' }}
+          DEFAULT_J: ${{ vars.DEFAULT_JURISDICTION || 'texas' }}
+        run: python -m wildfire.pipeline --all --default "$DEFAULT_J" --out site/data --cache .cache $FIXTURES
+      # PRD reference event: Smokehouse Creek Fire, Feb 2024. Built once from archived FIRMS (SP)
+      # and archived HRRR runs, then reused from cache so it costs nothing on later runs.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: replay-out
+          key: replay-v1-${{ vars.REPLAY_AS_OF || '2024-02-27T21:00Z' }}
+      - name: Historical replay
+        if: ${{ !inputs.fixtures }}
+        env:
+          FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+          REPLAY_AS_OF: ${{ vars.REPLAY_AS_OF || '2024-02-27T21:00Z' }}
+          REPLAY_LABEL: ${{ vars.REPLAY_LABEL || 'Smokehouse Creek Fire' }}
+          REPLAY_PACK: ${{ vars.REPLAY_PACK || 'texas' }}
+        run: |
+          if [ ! -f replay-out/jurisdictions.json ]; then
+            python -m wildfire.pipeline -j "$REPLAY_PACK" --as-of "$REPLAY_AS_OF" --label "$REPLAY_LABEL" --out replay-out --cache .cache-replay || true
+          fi
+          python scripts/merge_replay.py replay-out site/data
+      - name: Build site
+        env:
+          WFI_API_URL: ${{ vars.WFI_API_URL }}
+        run: python scripts/build_site.py
+      - name: Attest data provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: "site/data/*/manifest.json"
+      - name: Keep run record (audit, 90 days)
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: run-record-${{ github.run_id }}
+          path: |
+            site/data/*/manifest.json
+            site/data/*/summary.json
+          retention-days: 90
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

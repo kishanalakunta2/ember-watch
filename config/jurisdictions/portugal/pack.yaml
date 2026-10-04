@@ -1,0 +1,67 @@
+# Second jurisdiction pack (PRD SC-5): mainland Portugal using global providers only.
+# Proves the core starts with a different pack and no core code changes.
+id: portugal
+name: Portugal (mainland)
+country: PT
+region: PT-mainland
+timezone: Europe/Lisbon
+units: metric
+languages: [pt, en]
+terminology:
+  fire: rural fire
+  incident: occurrence
+
+roles:                       # [TO VALIDATE]
+  wildfire_lead: AGIF / ICNF
+  emergency_management: ANEPC
+
+ecosystems: [mediterranean_shrubland, eucalyptus_plantation, pine_forest]
+
+geography:
+  boundary: boundary.geojson
+  places: places.geojson
+  grid_spacing_deg: 0.25
+
+providers:
+  active_fire:
+    - id: nasa_firms
+      sources: [VIIRS_NOAA20_NRT, VIIRS_NOAA21_NRT, VIIRS_SNPP_NRT, MODIS_NRT]
+      day_range: 3
+  weather:
+    - id: open_meteo
+      model: ecmwf_ifs025      # ECMWF IFS open data (global baseline, PRD §6.2)
+      fallback_model: best_match
+      past_days: 60
+      forecast_days: 3
+  incidents: []                # no authoritative feed configured yet [TO SELECT]
+
+detection:
+  cluster_radius_km: 1.5
+  cluster_window_hours: 36
+  max_spread_kmh: 2.0            # head-fire spread allowance between passes
+  incident_match_km: 3.0
+  exposure_radius_km: 25.0
+  static_source:
+    min_distinct_days: 3
+    max_extent_km: 0.8
+  routing:
+    priority_review: 0.85
+    verify: 0.50
+
+risk:
+  model_id: fwi-system-v1
+  primary_index: fwi
+  classes:                     # EFFIS classes were derived for European fire regimes
+    - {name: Low,       min: 0}
+    - {name: Moderate,  min: 5.2}
+    - {name: High,      min: 11.2}
+    - {name: Very high, min: 21.3}
+    - {name: Extreme,   min: 38.0}
+  validation:
+    status: not_validated
+    note: >-
+      Architecture test pack. Same FWI model, ECMWF weather. Not validated for Portugal.
+
+compliance: [EU_GDPR, NIS2]
+aviation:
+  regulation_profile: EASA_EU

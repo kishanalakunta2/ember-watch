@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ember Watch</title>
+<meta name="description" content="Wildfire intelligence: live satellite detections, fire-weather risk and evidence-linked alerts.">
+<meta name="referrer" content="no-referrer">
+<!-- CSP: only this origin, plus optional basemap tiles and the configured Evidence API. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://*.basemaps.cartocdn.com; connect-src 'self' https://*.basemaps.cartocdn.com __API_ORIGIN__; worker-src 'self' blob:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="wfi-api" content="__API_URL__">
+<meta name="wfi-basemap" content="carto">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="vendor/maplibre-gl.css">
+<link rel="stylesheet" href="style.css">
+<script src="vendor/maplibre-gl-csp.js"></script>
+<script src="boot.js"></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<!--BODY-->
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <div class="mark" aria-hidden="true"></div>
+      <div><h1>Ember Watch</h1><p>Wildfire intelligence · satellite detections, fire weather and evidence-linked alerts</p></div>
+    </div>
+    <div class="ctrls">
+      <label class="sr" for="jur">Jurisdiction</label>
+      <select id="jur"></select>
+      <span id="mode" class="pill">Loading</span>
+      <span id="fresh" class="pill"><span class="dot"></span>Loading</span>
+      <span id="apikey" class="ctrls" hidden>
+        <label class="sr" for="apikey-in">Analyst API key</label>
+        <input id="apikey-in" class="btn" type="password" autocomplete="off" placeholder="Analyst API key" size="18">
+        <button id="apikey-btn" class="btn" type="button">Use key</button>
+      </span>
+    </div>
+  </header>
+  <p id="fatal" class="card" role="alert" hidden></p>
+
+  <section class="brief" aria-label="Situation brief"><span class="lbl">Situation</span><ul id="brief-list"><li>Loading…</li></ul></section>
+  <section id="kpis" class="kpis" aria-label="Key figures"></section>
+
+  <section class="main">
+    <div class="card mapcard">
+      <div class="mapbar">
+        <div class="seg" id="lead" role="group" aria-label="Fire-weather day">
+          <button type="button" data-lead="0" aria-pressed="true">Today</button>
+          <button type="button" data-lead="1" aria-pressed="false">Tomorrow</button>
+          <button type="button" data-lead="2" aria-pressed="false">Day 3</button>
+        </div>
+        <label class="chk"><input id="show-risk" type="checkbox" checked> Fire weather</label>
+        <label class="chk"><input id="show-det" type="checkbox" checked> Detections</label>
+        <label class="chk"><input id="show-inc" type="checkbox" checked> Incidents</label>
+        <label class="chk"><input id="show-places" type="checkbox" checked> Places</label>
+        <label class="range" for="age">Detections from last <input id="age" type="range" min="3" max="72" step="3" value="48"> <output id="age-out" class="mono">48 h</output></label>
+      </div>
+      <div id="map" role="region" aria-label="Map of fire weather, detections and incidents"></div>
+      <div id="legend" class="legend"></div>
+    </div>
+    <aside class="side">
+      <div class="card">
+        <div class="cardhead"><div><h2>Detection queue</h2><p class="sub">Clustered, fused and routed. Every decision stays with a person.</p></div><span id="queue-count" class="pill"></span></div>
+        <ol id="queue" class="queue"></ol>
+      </div>
+    </aside>
+  </section>
+
+  <section id="detail" class="card detail" aria-live="polite"></section>
+
+  <section class="lower">
+    <div id="inspector" class="card"></div>
+    <div id="sources" class="card"></div>
+  </section>
+  <section id="config" class="card"></section>
+
+  <footer class="foot">
+    <p>Decision support only. Not an authoritative source for dispatch, evacuation or public warning.</p>
+    <p>Data: NASA FIRMS (LANCE) · NIFC WFIGS · Open-Meteo (CC BY 4.0) · Natural Earth. Map tiles © OpenStreetMap contributors © CARTO.</p>
+  </footer>
+</div>
+<!--/BODY-->
+</body>
+</html>

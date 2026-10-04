@@ -1,0 +1,18 @@
+[project]
+name = "wildfire-intel"
+version = "0.3.0"
+description = "Global Wildfire Intelligence Platform — reference implementation (PRD V0.2)"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+
+[tool.ruff]
+line-length = 130
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "B", "S"]
+ignore = ["E501", "S101", "S603", "S311", "B008"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]

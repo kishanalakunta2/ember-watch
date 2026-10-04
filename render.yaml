@@ -1,0 +1,25 @@
+# One-click deploy of the Evidence API on Render's free tier (Blueprint).
+# Free instances sleep when idle and have an ephemeral disk: see SECURITY.md before relying on the audit log.
+services:
+  - type: web
+    name: wildfire-evidence-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: DATA_URL            # e.g. https://<user>.github.io/<repo>/data
+        sync: false
+      - key: API_KEYS            # JSON from `python -m api.keys analyst`
+        sync: false
+      - key: ALLOWED_ORIGINS     # e.g. https://<user>.github.io
+        sync: false
+      - key: PUBLIC_READ
+        value: "0"
+      - key: TRUST_PROXY
+        value: "1"
+      - key: LLM_BASE_URL
+        sync: false
+      - key: LLM_MODEL
+        sync: false
+      - key: LLM_API_KEY
+        sync: false

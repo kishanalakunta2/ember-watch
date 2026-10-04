@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+.cache/
+.venv/
+var/
+site/
+*.tmp
+.env
+.env.*
