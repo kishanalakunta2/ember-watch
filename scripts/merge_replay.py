@@ -26,11 +26,19 @@ def main(src: Path, dst: Path) -> int:
         shutil.rmtree(src, ignore_errors=True)   # do not cache an empty replay
         print("replay produced no data; not merged")
         return 0
+    # Only cache a replay whose satellite archive actually came back; otherwise it is shown
+    # this run but rebuilt next run (e.g. after the FIRMS_MAP_KEY secret is added).
+    complete = all(any(x["provider"] == "nasa_firms" and x["status"] == "ok"
+                       for x in json.loads((src / e["id"] / "summary.json").read_text())["sources"]) for e in good)
+    if not complete:
+        print("replay has no satellite data yet; shown but not cached")
     site_idx = dst / "jurisdictions.json"
     cur = json.loads(site_idx.read_text()) if site_idx.is_file() else []
     ids = {e["id"] for e in good}
     site_idx.write_text(json.dumps([e for e in cur if e["id"] not in ids] + good))
     print(f"merged {len(good)} replay view(s)")
+    if not complete:
+        shutil.rmtree(src, ignore_errors=True)
     return 0
 
 
