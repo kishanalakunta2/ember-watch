@@ -29,6 +29,7 @@ from .config import list_packs, load_pack
 from .explain import Units, explain_candidate
 from .fixtures import firms_csv_rows, wfigs_fixture
 from .geo import grid_in_ring
+from .models import SourceMeta
 from .providers import firms, geonames, open_meteo, wfigs
 
 log = logging.getLogger("wildfire")
@@ -69,21 +70,34 @@ def run(pack_id: str, out_root: Path, *, fixtures: bool, cache_dir: Path | None,
 
     sources = []
     observations, incidents = [], []
+
+    def guarded(category: str, ref, call, empty):
+        """One broken provider must never take down the whole run."""
+        try:
+            return call()
+        except Exception as e:  # noqa: BLE001 — recorded in provenance, run continues
+            log.exception("%s provider %s crashed", category, ref.id)
+            sources.append(SourceMeta(provider=ref.id, dataset=category, status="failed", fetched_at=now,
+                                      native_resolution="-", expected_refresh="-", license="-", attribution="-",
+                                      source_uri="-", message=f"{type(e).__name__}: {str(e)[:200]}"))
+            return empty
+
     for ref in pack.providers.active_fire:
-        o, m = ACTIVE_FIRE[ref.id](pack, ref, now=now, fixtures=fx_dir, as_of=as_of)
+        o, m = guarded("active_fire", ref, lambda ref=ref: ACTIVE_FIRE[ref.id](pack, ref, now=now, fixtures=fx_dir, as_of=as_of), ([], []))
         observations += [x for x in o if x.observation_time <= now]
         sources += m
     for ref in pack.providers.incidents if not as_of else []:
-        i, m = INCIDENTS[ref.id](pack, ref, now=now, fixtures=fx_dir)
+        i, m = guarded("incidents", ref, lambda ref=ref: INCIDENTS[ref.id](pack, ref, now=now, fixtures=fx_dir), ([], []))
         incidents += i
         sources += m
     spacing = pack.geography.grid_spacing_deg
     points = grid_in_ring(pack.boundary_ring, spacing)
     cells = []
     for ref in pack.providers.weather[:1]:
-        series, m = WEATHER[ref.id](pack, ref, points, now=now, cache_dir=cache_dir, fixtures=fx_dir, as_of=as_of)
+        series, m = guarded("weather", ref, lambda ref=ref: WEATHER[ref.id](pack, ref, points, now=now, cache_dir=cache_dir,
+                                                                          fixtures=fx_dir, as_of=as_of), (None, []))
         sources += m
-        cells = risk.compute(pack, points, series, now)
+        cells = risk.compute(pack, points, series, now) if series else []
     if fx_dir:
         shutil.rmtree(fx_dir, ignore_errors=True)
 

@@ -186,3 +186,29 @@ def test_replay_requests_archived_products(monkeypatch):
     OM.fetch(pack, wref, [(35.0, -100.0)], now=as_of, cache_dir=None, as_of=as_of)
     u, p = calls[-1]
     assert u == OM.HIST_URL and p["start_date"] == "2023-12-29" and p["end_date"] == "2024-02-29"
+
+
+def test_http_get_handles_gzip_bodies(monkeypatch):
+    """Regression: NIFC/ArcGIS returns gzip; the body must be decoded exactly once."""
+    import gzip
+    import httpx
+    from wildfire import http as H
+    payload = b'{"type":"FeatureCollection","features":[]}'
+
+    def handler(request):
+        return httpx.Response(200, headers={"Content-Encoding": "gzip", "Content-Type": "application/json"},
+                              content=gzip.compress(payload))
+    monkeypatch.setattr(H, "_TRANSPORT", httpx.MockTransport(handler))
+    r = H.get("https://services3.arcgis.com/x/query")
+    assert r.json() == {"type": "FeatureCollection", "features": []}
+
+
+def test_pipeline_survives_a_crashing_provider(monkeypatch, tmp_path):
+    from wildfire import pipeline
+    def boom(*a, **k):
+        raise RuntimeError("provider exploded")
+    monkeypatch.setitem(pipeline.INCIDENTS, "nifc_wfigs", boom)
+    s = pipeline.run("texas", tmp_path, fixtures=True, cache_dir=None)
+    failed = [x for x in s["sources"] if x["status"] == "failed"]
+    assert failed and "provider exploded" in failed[0]["message"]
+    assert s["kpis"]["grid_cells"] > 0

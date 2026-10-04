@@ -42,6 +42,12 @@ class FetchError(RuntimeError):
     pass
 
 
+_TRANSPORT = None   # tests inject an httpx.MockTransport here
+# iter_bytes() already undoes gzip/deflate/br, so these headers must not travel
+# with the decoded body or httpx would try to decompress it a second time.
+_HOP_HEADERS = {"content-encoding", "content-length", "transfer-encoding"}
+
+
 def get(url: str, *, params: dict | None = None, timeout: float = 60.0, retries: int = 3) -> httpx.Response:
     host = urlsplit(url).hostname or ""
     if urlsplit(url).scheme != "https" or host not in ALLOWED_HOSTS:
@@ -51,7 +57,7 @@ def get(url: str, *, params: dict | None = None, timeout: float = 60.0, retries:
     for attempt in range(1, retries + 1):
         try:
             with httpx.Client(timeout=timeout, headers={"User-Agent": USER_AGENT},
-                              follow_redirects=False, verify=True) as c:
+                              follow_redirects=False, verify=True, transport=_TRANSPORT) as c:
                 with c.stream("GET", url, params=params) as r:
                     chunks, size = [], 0
                     for chunk in r.iter_bytes():
@@ -60,7 +66,8 @@ def get(url: str, *, params: dict | None = None, timeout: float = 60.0, retries:
                             raise FetchError(f"response from {host} exceeded {MAX_BYTES} bytes")
                         chunks.append(chunk)
                     body = b"".join(chunks)
-                resp = httpx.Response(r.status_code, headers=r.headers, content=body, request=r.request)
+                headers = [(k, v) for k, v in r.headers.items() if k.lower() not in _HOP_HEADERS]
+                resp = httpx.Response(r.status_code, headers=headers, content=body, request=r.request)
             if resp.status_code in (429, 500, 502, 503, 504) and attempt < retries:
                 log.warning("%s returned %s; retry %d", host, resp.status_code, attempt)
                 time.sleep(delay)
@@ -69,6 +76,8 @@ def get(url: str, *, params: dict | None = None, timeout: float = 60.0, retries:
             if resp.status_code >= 400:
                 raise FetchError(f"{host} returned HTTP {resp.status_code}: {redact(resp.text[:200])}")
             return resp
+        except httpx.DecodingError as e:
+            raise FetchError(f"{host} sent a body that could not be decoded: {e}") from e
         except (httpx.TransportError, httpx.TimeoutException) as e:
             last = e
             log.warning("%s transport error (%s); attempt %d/%d", host, type(e).__name__, attempt, retries)
