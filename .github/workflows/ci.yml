@@ -25,7 +25,12 @@ jobs:
       - name: Lint (incl. bandit security rules)
         run: ruff check .
       - name: Tests (FWI reference values, fusion, API auth/RBAC/integrity)
-        run: pytest -q
+        run: |
+          set +e
+          pytest -q -rfE 2>&1 | tee pytest.log
+          code=${PIPESTATUS[0]}
+          [ "$code" -ne 0 ] && python scripts/annotate.py pytest.log "pytest failed"
+          exit $code
       - name: Dependency vulnerability audit
         run: pip-audit -r requirements/api.txt --require-hashes --strict
       - name: Offline end-to-end smoke run

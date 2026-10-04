@@ -57,7 +57,12 @@ jobs:
           GITHUB_MODELS_TOKEN: ${{ github.token }}   # only ever sent to models.github.ai
           FIXTURES: ${{ inputs.fixtures && '--fixtures' || '' }}
           DEFAULT_J: ${{ vars.DEFAULT_JURISDICTION || 'texas' }}
-        run: python -m wildfire.pipeline --all --default "$DEFAULT_J" --out site/data --cache .cache $FIXTURES
+        run: |
+          set +e
+          python -m wildfire.pipeline --all --default "$DEFAULT_J" --out site/data --cache .cache $FIXTURES 2>&1 | tee pipeline.log
+          code=${PIPESTATUS[0]}
+          [ "$code" -ne 0 ] && python scripts/annotate.py pipeline.log "pipeline failed"
+          exit $code
       # PRD reference event: Smokehouse Creek Fire, Feb 2024. Built once from archived FIRMS (SP)
       # and archived HRRR runs, then reused from cache so it costs nothing on later runs.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
