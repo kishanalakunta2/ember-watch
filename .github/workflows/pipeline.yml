@@ -114,5 +114,19 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      # Until Pages is switched on in repo settings, skip publishing with a clear warning
+      # instead of failing (and emailing) every 30 minutes.
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          if gh api "repos/$REPO/pages" > /dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=GitHub Pages is off::Data was built but not published. Turn it on in Settings > Pages > Source: GitHub Actions."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
       - id: deploy
+        if: steps.check.outputs.enabled == 'true'
         uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
