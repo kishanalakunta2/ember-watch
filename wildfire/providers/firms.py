@@ -83,8 +83,8 @@ def parse_csv(text: str, dataset: str, jurisdiction: str, ingestion: datetime) -
 
 ARCHIVE = {  # standard-processing (science quality) equivalents for replays
     "VIIRS_SNPP_NRT": "VIIRS_SNPP_SP", "VIIRS_NOAA20_NRT": "VIIRS_NOAA20_SP",
-    "VIIRS_NOAA21_NRT": "VIIRS_NOAA21_SP", "MODIS_NRT": "MODIS_SP",
-}
+    "MODIS_NRT": "MODIS_SP",
+}   # NOAA-21 has no standard-processing archive in FIRMS yet ("Invalid source")
 
 
 def fetch(pack, ref, *, now: datetime, fixtures: Path | None = None,
@@ -97,6 +97,12 @@ def fetch(pack, ref, *, now: datetime, fixtures: Path | None = None,
     for ds in ref.sources:
         if ds not in DATASETS:
             log.warning("unknown FIRMS dataset %s skipped", ds)
+            continue
+        if as_of and ds not in ARCHIVE:
+            metas.append(SourceMeta(provider="nasa_firms", dataset=ds, status="skipped", fetched_at=now,
+                                    native_resolution=f"{int(DATASETS[ds][2])} m", expected_refresh="-",
+                                    license=LICENSE, attribution=ATTRIB, source_uri="-",
+                                    message="no archived (SP) product for replays"))
             continue
         req = ARCHIVE.get(ds, ds) if as_of else ds
         date_part = f"/{(as_of - timedelta(days=ref.day_range - 1)):%Y-%m-%d}" if as_of else ""
